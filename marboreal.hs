@@ -1,11 +1,12 @@
 import System.Random
+import Data.List.Split (chunksOf)
 
 xRes, yRes :: Int
-xRes = 50
-yRes = 50
+xRes = 1920
+yRes = 1200
 
 scale :: Float
-scale = 0.4
+scale = 0.0125
 
 
 rd, ru :: Float -> Float
@@ -50,16 +51,20 @@ scaleVct :: Vct -> Vct
 scaleVct v@(Vct x y) = Vct (x/l) (y/l)
     where l = pyth v
 
-randV :: StdGen -> StdGen -> [[Vct]]
-randV gen1 gen2 = [[scaleVct (Vct x y) | y <- randoms gen2] | x <- randoms gen1]
+angleToUnitVct:: Float -> Vct
+angleToUnitVct theta = Vct (sin theta) (cos theta)
+
+randVss :: Int -> Int -> StdGen -> [[Vct]]
+randVss x y gen = take y $ chunksOf x $ map angleToUnitVct $ map (2*pi*) (randoms gen)
+
 
 perlinNoise :: Vct -> [[Vct]] -> Float
-perlinNoise v@(Vct x y) vs = (i1-i0)*fy + i0
+perlinNoise v@(Vct x y) vss = (i1-i0)*fy + i0
     where v0 = Vct (rd x) (rd y)
           v1 = Vct (ru x) (rd y)
           v2 = Vct (rd x) (ru y)
           v3 = Vct (ru x) (ru y)
-          g (Vct x y) = vs!!(round x)!!(round y)  -- Only ever called on int vects
+          g (Vct x y) = vss!!(round x)!!(round y)  -- Only ever called on int vects
           d0 = dot (g v0) (v `vm` v0) -- Gradient vectors dotted with offset vectors
           d1 = dot (g v1) (v `vm` v1)
           d2 = dot (g v2) (v `vm` v2)
@@ -71,8 +76,8 @@ perlinNoise v@(Vct x y) vs = (i1-i0)*fy + i0
           i0 = (d1-d0)*fx + d0
           i1 = (d3-d2)*fx + d2
 
-toPix :: [[Float]] -> [[Int]]
-toPix fss = map (map (max 0)) $ map (map floor) scaledfss
+rescale :: [[Float]] -> [[Int]]
+rescale fss = map (map (max 0)) $ map (map floor) scaledfss
     where minf = minimum (map minimum fss)
           min0 = map (map (\x -> x-minf)) fss
           maxf = maximum (map maximum min0)
@@ -82,8 +87,8 @@ toPix fss = map (map (max 0)) $ map (map floor) scaledfss
 -- Generate image from randoms
 pixs :: [[Vct]] -> [[Float]]
 pixs vss = [[perlinNoise (Vct x y) vss
-                    | y <- [0.0,scale..scale*(fromIntegral yRes-1)]]
                     | x <- [0.0,scale..scale*(fromIntegral xRes-1)]]
+                    | y <- [0.0,scale..scale*(fromIntegral yRes-1)]]
 
 mkPPM :: [[Int]] -> String
 mkPPM pss = "P2\n" ++ show xRes ++ " " ++ show yRes ++ "\n" ++
@@ -92,4 +97,4 @@ mkPPM pss = "P2\n" ++ show xRes ++ " " ++ show yRes ++ "\n" ++
 
 main :: IO ()
 main = do
-    putStr $ mkPPM $ toPix $ pixs $ take (yRes+1) $ map (take (xRes+1)) $ randV (mkStdGen 98342) (mkStdGen 193732)
+    putStr $ mkPPM $ rescale $ pixs $ randVss xRes yRes (mkStdGen 137)
